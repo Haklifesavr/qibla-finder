@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Qibla Finder</title>
+    <style>
+        #compass-container {
+            width: 200px;
+            height: 200px;
+            position: relative;
+        }
+
+        #compass-arrow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: 50% 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Qibla Finder</h1>
+    <div id="compass-container">
+        <img id="compass-arrow" src="compass.png" alt="Compass Arrow">
+    </div>
+    <div id="direction"></div>
+    <script>
+        async function getQiblaDirection(latitude, longitude) {
+            const kaabaLatitude = 21.4225;
+            const kaabaLongitude = 39.8262;
+    
+            const userLatitude = latitude * (Math.PI / 180);
+            const userLongitude = longitude * (Math.PI / 180);
+            const kaabaLat = kaabaLatitude * (Math.PI / 180);
+            const kaabaLong = kaabaLongitude * (Math.PI / 180);
+    
+            const y = Math.sin(kaabaLong - userLongitude);
+            const x = Math.cos(userLatitude) * Math.tan(kaabaLat) - Math.sin(userLatitude) * Math.cos(kaabaLong - userLongitude);
+            const q = Math.atan2(y, x);
+            let qiblaDirection = (q * 180 / Math.PI + 360) % 360;
+    
+            const magneticDeclination = await calculateMagneticDeclination(latitude, longitude);
+            qiblaDirection = (qiblaDirection - magneticDeclination + 360) % 360;
+    
+            return qiblaDirection;
+        }
+    
+        function calculateMagneticDeclination(latitude, longitude) {
+            const url = `https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat=${latitude}&lon=${longitude}&resultFormat=csv`;
+            return fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    const lines = data.split('\n');
+                    return parseFloat(lines[1].split(',')[3]);
+                })
+                .catch(error => {
+                    console.error('Error fetching magnetic declination:', error);
+                    return 0;
+                });
+        }
+    
+        function setupOrientationListener(qiblaDirection) {
+            window.addEventListener('deviceorientation', function(event) {
+                const alpha = event.alpha;
+                if (alpha !== null) {
+                    const direction = (360 - (alpha - qiblaDirection + 360) % 360).toFixed(2);
+                    const compassArrow = document.getElementById('compass-arrow');
+                    compassArrow.style.transform = `rotate(${direction}deg)`;
+                    document.getElementById('direction').innerHTML = `Qibla Direction: ${direction}°`;
+                }
+            }, true);
+        }
+    
+        window.addEventListener('load', function() {
+            navigator.geolocation.getCurrentPosition(async function(position) {
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+                const qiblaDirection = await getQiblaDirection(latitude, longitude);
+                setupOrientationListener(qiblaDirection);
+            });
+        });
+    </script>
+</body>
+</html>
